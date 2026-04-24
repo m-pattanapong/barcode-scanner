@@ -367,8 +367,8 @@ async function startCamera() {
     camStatus.classList.add('active');
     scanning = true;
     requestAnimationFrame(scanLoop);
-  } catch (err) {
-    camStatus.textContent = '❌ ไม่สามารถเปิดกล้องได้';
+} catch (err) {
+    camStatus.textContent = '❌ ' + err.name + ': ' + err.message;
     console.error(err);
   }
 }
