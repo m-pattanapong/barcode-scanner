@@ -6,7 +6,7 @@
 <title>สแกนบัตรพนักงาน</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
-  :root { --bg:#0f1117;--surface:#1a1d27;--border:#2a2d3e;--accent:#00e5ff;--accent2:#7c5cfc;--success:#00c896;--error:#ff4d6d;--text:#e8eaf0;--muted:#6b7280; }
+  :root{--bg:#0f1117;--surface:#1a1d27;--border:#2a2d3e;--accent:#00e5ff;--accent2:#7c5cfc;--success:#00c896;--error:#ff4d6d;--text:#e8eaf0;--muted:#6b7280}
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px}
   header{width:100%;max-width:480px;display:flex;align-items:center;gap:12px;margin-bottom:28px}
@@ -53,7 +53,6 @@
   .config-body input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none}
   .config-body input:focus{border-color:var(--accent2)}
   .save-btn{margin-top:12px;width:100%;padding:10px;background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
-  .compat-warn{width:100%;max-width:480px;margin-top:16px;background:rgba(255,183,3,.08);border:1px solid rgba(255,183,3,.3);border-radius:12px;padding:14px 16px;font-size:13px;color:#ffb703;display:none}
 </style>
 </head>
 <body>
@@ -65,10 +64,8 @@
 <div class="camera-wrapper">
   <video id="preview" autoplay muted playsinline></video>
   <div class="scan-frame"><div class="scan-box"><span></span><span></span><span></span><span></span></div></div>
-  <div class="cam-status" id="camStatus">กำลังเปิดกล้อง...</div>
+  <div class="cam-status" id="camStatus">กำลังโหลด...</div>
 </div>
-
-<div class="compat-warn" id="compatWarn">⚠️ เบราว์เซอร์นี้ไม่รองรับ BarcodeDetector API — กรุณาใช้ Chrome บน Android หรือ Safari 17+ บน iPhone</div>
 
 <div class="result-card" id="resultCard">
   <div class="result-header">
@@ -93,78 +90,105 @@
   </div>
 </details>
 
-<script>
+<!-- ZXing via ES module CDN -->
+<script type="module">
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from 'https://esm.sh/@zxing/library@0.19.1';
+
+const video     = document.getElementById('preview');
+const camStatus = document.getElementById('camStatus');
+
 let SCRIPT_URL = localStorage.getItem('scriptUrl') || '';
 if (SCRIPT_URL) document.getElementById('scriptUrl').value = SCRIPT_URL;
 
-function saveConfig() {
+window.saveConfig = function() {
   SCRIPT_URL = document.getElementById('scriptUrl').value.trim();
   localStorage.setItem('scriptUrl', SCRIPT_URL);
   showToast('บันทึก URL แล้ว ✓');
   document.getElementById('configSection').removeAttribute('open');
-}
+};
 
-const video = document.getElementById('preview');
-const camStatus = document.getElementById('camStatus');
-let detector, cooldown = false;
+// ── INIT ─────────────────────────────────────────────────
+const hints = new Map();
+hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.ITF,
+  BarcodeFormat.QR_CODE,
+  BarcodeFormat.CODABAR,
+]);
+hints.set(DecodeHintType.TRY_HARDER, true);
 
-async function init() {
-  if (!('BarcodeDetector' in window)) {
-    document.getElementById('compatWarn').style.display = 'block';
-    camStatus.textContent = '❌ ไม่รองรับ BarcodeDetector';
-    camStatus.classList.add('error');
-    return;
+const codeReader = new BrowserMultiFormatReader(hints);
+
+camStatus.textContent = 'กำลังเปิดกล้อง...';
+
+try {
+  // ขอ device list แล้วเลือกกล้องหลัง
+  const devices = await codeReader.listVideoInputDevices();
+  let deviceId = undefined;
+  if (devices.length > 1) {
+    // เลือกกล้องหลัง (ชื่อมักมีคำว่า back/rear/environment)
+    const back = devices.find(d =>
+      /back|rear|environment/i.test(d.label)
+    );
+    deviceId = back ? back.deviceId : devices[devices.length - 1].deviceId;
   }
-  detector = new BarcodeDetector({
-    formats: ['code_128','code_39','ean_13','ean_8','qr_code','itf','codabar']
+
+  camStatus.textContent = '🟢 พร้อมสแกน';
+  camStatus.classList.add('active');
+
+  // เริ่ม decode ต่อเนื่องจาก video element
+  codeReader.decodeFromVideoDevice(deviceId, 'preview', (result, err) => {
+    if (result) {
+      if (navigator.vibrate) navigator.vibrate(80);
+      onBarcodeDetected(result.getText());
+    }
+    // err ที่เกิดตลอดเวลาขณะสแกนปกติ (NotFoundException) ไม่ต้องแสดง
   });
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
-    });
-    video.srcObject = stream;
-    await video.play();
-    camStatus.textContent = '🟢 พร้อมสแกน';
-    camStatus.classList.add('active');
-    scanLoop();
-  } catch(err) {
-    camStatus.textContent = '❌ ' + err.name + ': ' + err.message;
-    camStatus.classList.add('error');
-  }
+
+} catch(err) {
+  camStatus.textContent = '❌ ' + err.message;
+  camStatus.classList.add('error');
 }
 
-async function scanLoop() {
-  if (!cooldown && video.readyState === video.HAVE_ENOUGH_DATA) {
-    try {
-      const barcodes = await detector.detect(video);
-      if (barcodes.length > 0) {
-        cooldown = true;
-        if (navigator.vibrate) navigator.vibrate(80);
-        await onBarcodeDetected(barcodes[0].rawValue);
-        setTimeout(() => { cooldown = false; }, 3000);
-      }
-    } catch(_) {}
-  }
-  requestAnimationFrame(scanLoop);
-}
-
+// ── BARCODE HANDLER ───────────────────────────────────────
+let cooldown = false;
 async function onBarcodeDetected(code) {
+  if (cooldown) return;
+  cooldown = true;
+  setTimeout(() => { cooldown = false; }, 3000);
+
   showLoading(code);
+
   if (!SCRIPT_URL) {
     showError('ยังไม่ได้ตั้งค่า URL', 'กรุณากรอก Apps Script URL ด้านล่าง');
     document.getElementById('configSection').setAttribute('open','');
     return;
   }
+
   try {
-    const res = await fetch(`${SCRIPT_URL}?empId=${encodeURIComponent(code)}`);
+    const res  = await fetch(`${SCRIPT_URL}?empId=${encodeURIComponent(code)}`);
     const data = await res.json();
-    if (!data.success) { showError('ไม่พบรหัสพนักงาน', `รหัส: ${code}`); addHistory(code,null,null,false); return; }
-    await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify({empId:data.empId,name:data.name,dept:data.dept}), headers:{'Content-Type':'text/plain'} });
+    if (!data.success) {
+      showError('ไม่พบรหัสพนักงาน', `รหัส: ${code}`);
+      addHistory(code, null, null, false);
+      return;
+    }
+    await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ empId: data.empId, name: data.name, dept: data.dept }),
+      headers: { 'Content-Type': 'text/plain' }
+    });
     showSuccess(data);
     addHistory(data.empId, data.name, data.dept, true);
-  } catch(err) { showError('เกิดข้อผิดพลาด', err.message); }
+  } catch(err) {
+    showError('เกิดข้อผิดพลาด', err.message);
+  }
 }
 
+// ── UI HELPERS ────────────────────────────────────────────
 function showLoading(code) {
   const c = document.getElementById('resultCard');
   c.className = 'result-card visible loading';
@@ -174,7 +198,6 @@ function showLoading(code) {
   document.getElementById('infoGrid').innerHTML = '';
   document.getElementById('resultTime').innerHTML = '';
 }
-
 function showSuccess(data) {
   const c = document.getElementById('resultCard');
   c.className = 'result-card visible success';
@@ -187,7 +210,6 @@ function showSuccess(data) {
     <div class="info-item"><label>แผนก</label><div class="val">${data.dept}</div></div>`;
   document.getElementById('resultTime').innerHTML = '🕐 ' + new Date().toLocaleString('th-TH',{hour12:false});
 }
-
 function showError(title, sub) {
   const c = document.getElementById('resultCard');
   c.className = 'result-card visible error';
@@ -197,7 +219,6 @@ function showError(title, sub) {
   document.getElementById('infoGrid').innerHTML = '';
   document.getElementById('resultTime').innerHTML = '';
 }
-
 function addHistory(empId, name, dept, success) {
   document.getElementById('historySection').style.display = 'block';
   const list = document.getElementById('historyList');
@@ -208,7 +229,6 @@ function addHistory(empId, name, dept, success) {
   list.prepend(item);
   while(list.children.length > 10) list.removeChild(list.lastChild);
 }
-
 function showToast(msg) {
   const t = document.createElement('div');
   t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1d27;border:1px solid #00c896;color:#00c896;padding:10px 20px;border-radius:999px;font-size:13px;z-index:9999';
@@ -216,8 +236,6 @@ function showToast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2500);
 }
-
-init();
 </script>
 </body>
 </html>
