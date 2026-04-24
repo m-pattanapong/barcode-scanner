@@ -385,6 +385,7 @@ const formats = [
 ];
 hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
 const reader = new ZXing.MultiFormatReader();
+hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
 reader.setHints(hints);
 
 const canvas  = document.createElement('canvas');
