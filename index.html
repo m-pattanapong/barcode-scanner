@@ -4,324 +4,86 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>สแกนบัตรพนักงาน</title>
-<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
-
-  :root {
-    --bg:       #0f1117;
-    --surface:  #1a1d27;
-    --border:   #2a2d3e;
-    --accent:   #00e5ff;
-    --accent2:  #7c5cfc;
-    --success:  #00c896;
-    --error:    #ff4d6d;
-    --warn:     #ffb703;
-    --text:     #e8eaf0;
-    --muted:    #6b7280;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: 'Sarabun', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 24px 16px;
-  }
-
-  /* ── Header ── */
-  header {
-    width: 100%;
-    max-width: 480px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 28px;
-  }
-  .logo {
-    width: 42px; height: 42px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    border-radius: 12px;
-    display: grid; place-items: center;
-    font-size: 20px;
-  }
-  header h1 { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
-  header p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-  /* ── Camera Box ── */
-  .camera-wrapper {
-    width: 100%; max-width: 480px;
-    position: relative;
-    border-radius: 20px;
-    overflow: hidden;
-    background: #000;
-    aspect-ratio: 4/3;
-    border: 1px solid var(--border);
-  }
-  #preview {
-    width: 100%; height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  /* scanning frame overlay */
-  .scan-frame {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    pointer-events: none;
-  }
-  .scan-box {
-    width: 75%; height: 28%;
-    border: 2px solid var(--accent);
-    border-radius: 8px;
-    position: relative;
-    box-shadow: 0 0 0 9999px rgba(0,0,0,.45);
-  }
-  .scan-box::before {
-    content: '';
-    position: absolute;
-    top: -1px; left: 10%;
-    width: 80%; height: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 10px var(--accent);
-    animation: scanLine 2s linear infinite;
-  }
-  @keyframes scanLine {
-    0%   { top: 0%; opacity: 1; }
-    90%  { top: 100%; opacity: 1; }
-    100% { top: 100%; opacity: 0; }
-  }
-
-  /* corners */
-  .scan-box span {
-    position: absolute;
-    width: 18px; height: 18px;
-    border-color: var(--accent);
-    border-style: solid;
-  }
-  .scan-box span:nth-child(1) { top:-2px; left:-2px;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
-  .scan-box span:nth-child(2) { top:-2px; right:-2px; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
-  .scan-box span:nth-child(3) { bottom:-2px; left:-2px;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
-  .scan-box span:nth-child(4) { bottom:-2px; right:-2px; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
-
-  /* status badge on camera */
-  .cam-status {
-    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,.7);
-    backdrop-filter: blur(6px);
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    padding: 5px 16px;
-    font-size: 12px;
-    color: var(--muted);
-    font-family: 'IBM Plex Mono', monospace;
-    white-space: nowrap;
-  }
-  .cam-status.active { color: var(--accent); border-color: var(--accent); }
-
-  /* ── Result Card ── */
-  .result-card {
-    width: 100%; max-width: 480px;
-    margin-top: 20px;
-    border-radius: 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    padding: 20px;
-    display: none;
-    animation: fadeUp .3s ease;
-  }
-  .result-card.visible { display: block; }
-  @keyframes fadeUp {
-    from { opacity:0; transform: translateY(12px); }
-    to   { opacity:1; transform: translateY(0); }
-  }
-
-  .result-card.success { border-color: var(--success); }
-  .result-card.error   { border-color: var(--error); }
-  .result-card.loading { border-color: var(--accent2); }
-
-  .result-header {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 16px;
-  }
-  .result-icon {
-    width: 36px; height: 36px;
-    border-radius: 10px;
-    display: grid; place-items: center;
-    font-size: 18px;
-  }
-  .success .result-icon { background: rgba(0,200,150,.15); }
-  .error   .result-icon { background: rgba(255,77,109,.15); }
-  .loading .result-icon { background: rgba(124,92,252,.15); }
-
-  .result-title { font-size: 14px; font-weight: 600; }
-  .result-sub   { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
-  .info-grid {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-  .info-item label {
-    font-size: 11px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .8px;
-    display: block; margin-bottom: 3px;
-  }
-  .info-item .val {
-    font-size: 15px; font-weight: 600;
-  }
-  .info-item.full { grid-column: 1 / -1; }
-  .badge {
-    display: inline-block;
-    background: rgba(0,229,255,.1);
-    color: var(--accent);
-    border: 1px solid rgba(0,229,255,.3);
-    border-radius: 6px;
-    padding: 2px 10px;
-    font-size: 13px; font-weight: 600;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  /* timestamp */
-  .timestamp {
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--muted);
-    font-family: 'IBM Plex Mono', monospace;
-    display: flex; align-items: center; gap: 6px;
-  }
-
-  /* loading spinner */
-  .spinner {
-    width: 20px; height: 20px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent2);
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── History ── */
-  .history-section {
-    width: 100%; max-width: 480px;
-    margin-top: 24px;
-  }
-  .section-title {
-    font-size: 12px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 12px;
-  }
-  .history-list { display: flex; flex-direction: column; gap: 8px; }
-  .history-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 14px;
-    display: flex; align-items: center; gap: 12px;
-    animation: fadeUp .25s ease;
-  }
-  .history-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--success); flex-shrink: 0;
-  }
-  .history-dot.err { background: var(--error); }
-  .history-name  { font-size: 14px; font-weight: 600; flex: 1; }
-  .history-dept  { font-size: 12px; color: var(--muted); }
-  .history-time  { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
-
-  /* ── Config Section ── */
-  .config-section {
-    width: 100%; max-width: 480px;
-    margin-top: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 16px 20px;
-  }
-  .config-section summary {
-    cursor: pointer;
-    font-size: 13px; font-weight: 600;
-    color: var(--muted);
-    list-style: none;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .config-section summary::before { content: '⚙️'; }
-  .config-body { margin-top: 14px; }
-  .config-body label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
-  .config-body input {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: var(--text);
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 12px;
-    outline: none;
-    transition: border-color .2s;
-  }
-  .config-body input:focus { border-color: var(--accent2); }
-  .save-btn {
-    margin-top: 12px;
-    width: 100%;
-    padding: 10px;
-    background: linear-gradient(135deg, var(--accent2), var(--accent));
-    border: none; border-radius: 8px;
-    color: #fff; font-weight: 700; font-size: 13px;
-    cursor: pointer; transition: opacity .2s;
-  }
-  .save-btn:hover { opacity: .85; }
+  :root { --bg:#0f1117;--surface:#1a1d27;--border:#2a2d3e;--accent:#00e5ff;--accent2:#7c5cfc;--success:#00c896;--error:#ff4d6d;--text:#e8eaf0;--muted:#6b7280; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sarabun',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 16px}
+  header{width:100%;max-width:480px;display:flex;align-items:center;gap:12px;margin-bottom:28px}
+  .logo{width:42px;height:42px;background:linear-gradient(135deg,var(--accent2),var(--accent));border-radius:12px;display:grid;place-items:center;font-size:20px}
+  header h1{font-size:20px;font-weight:700} header p{font-size:12px;color:var(--muted);margin-top:2px}
+  .camera-wrapper{width:100%;max-width:480px;position:relative;border-radius:20px;overflow:hidden;background:#000;aspect-ratio:4/3;border:1px solid var(--border)}
+  #preview{width:100%;height:100%;object-fit:cover;display:block}
+  .scan-frame{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .scan-box{width:80%;height:25%;border:2px solid var(--accent);border-radius:8px;position:relative;box-shadow:0 0 0 9999px rgba(0,0,0,.45)}
+  .scan-box::before{content:'';position:absolute;top:0;left:5%;width:90%;height:2px;background:var(--accent);box-shadow:0 0 10px var(--accent);animation:scanLine 2s linear infinite}
+  @keyframes scanLine{0%{top:0%;opacity:1}90%{top:100%;opacity:1}100%{top:100%;opacity:0}}
+  .scan-box span{position:absolute;width:18px;height:18px;border-color:var(--accent);border-style:solid}
+  .scan-box span:nth-child(1){top:-2px;left:-2px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+  .scan-box span:nth-child(2){top:-2px;right:-2px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+  .scan-box span:nth-child(3){bottom:-2px;left:-2px;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+  .scan-box span:nth-child(4){bottom:-2px;right:-2px;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+  .cam-status{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);backdrop-filter:blur(6px);border:1px solid var(--border);border-radius:999px;padding:5px 16px;font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+  .cam-status.active{color:var(--accent);border-color:var(--accent)} .cam-status.error{color:var(--error);border-color:var(--error)}
+  .result-card{width:100%;max-width:480px;margin-top:20px;border-radius:16px;background:var(--surface);border:1px solid var(--border);padding:20px;display:none;animation:fadeUp .3s ease}
+  .result-card.visible{display:block}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  .result-card.success{border-color:var(--success)} .result-card.error{border-color:var(--error)} .result-card.loading{border-color:var(--accent2)}
+  .result-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .result-icon{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:18px}
+  .success .result-icon{background:rgba(0,200,150,.15)} .error .result-icon{background:rgba(255,77,109,.15)} .loading .result-icon{background:rgba(124,92,252,.15)}
+  .result-title{font-size:14px;font-weight:600} .result-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .info-item label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:3px}
+  .info-item .val{font-size:15px;font-weight:600} .info-item.full{grid-column:1/-1}
+  .badge{display:inline-block;background:rgba(0,229,255,.1);color:var(--accent);border:1px solid rgba(0,229,255,.3);border-radius:6px;padding:2px 10px;font-size:13px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+  .timestamp{margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent2);border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .history-section{width:100%;max-width:480px;margin-top:24px}
+  .section-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+  .history-list{display:flex;flex-direction:column;gap:8px}
+  .history-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;animation:fadeUp .25s ease}
+  .history-dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0} .history-dot.err{background:var(--error)}
+  .history-name{font-size:14px;font-weight:600;flex:1} .history-dept{font-size:12px;color:var(--muted)} .history-time{font-size:11px;color:var(--muted);font-family:'IBM Plex Mono',monospace}
+  .config-section{width:100%;max-width:480px;margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px}
+  .config-section summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);list-style:none;display:flex;align-items:center;gap:8px}
+  .config-section summary::before{content:'⚙️'}
+  .config-body{margin-top:14px} .config-body label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+  .config-body input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;outline:none}
+  .config-body input:focus{border-color:var(--accent2)}
+  .save-btn{margin-top:12px;width:100%;padding:10px;background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;border-radius:8px;color:#fff;font-weight:700;font-size:13px;cursor:pointer}
+  .compat-warn{width:100%;max-width:480px;margin-top:16px;background:rgba(255,183,3,.08);border:1px solid rgba(255,183,3,.3);border-radius:12px;padding:14px 16px;font-size:13px;color:#ffb703;display:none}
 </style>
 </head>
 <body>
-
 <header>
   <div class="logo">📷</div>
-  <div>
-    <h1>สแกนบัตรพนักงาน</h1>
-    <p>Employee Barcode Scanner</p>
-  </div>
+  <div><h1>สแกนบัตรพนักงาน</h1><p>Employee Barcode Scanner</p></div>
 </header>
 
-<!-- Camera -->
 <div class="camera-wrapper">
   <video id="preview" autoplay muted playsinline></video>
-  <div class="scan-frame">
-    <div class="scan-box">
-      <span></span><span></span><span></span><span></span>
-    </div>
-  </div>
+  <div class="scan-frame"><div class="scan-box"><span></span><span></span><span></span><span></span></div></div>
   <div class="cam-status" id="camStatus">กำลังเปิดกล้อง...</div>
 </div>
 
-<!-- Result Card -->
+<div class="compat-warn" id="compatWarn">⚠️ เบราว์เซอร์นี้ไม่รองรับ BarcodeDetector API — กรุณาใช้ Chrome บน Android หรือ Safari 17+ บน iPhone</div>
+
 <div class="result-card" id="resultCard">
   <div class="result-header">
     <div class="result-icon" id="resultIcon"></div>
-    <div>
-      <div class="result-title" id="resultTitle"></div>
-      <div class="result-sub"  id="resultSub"></div>
-    </div>
+    <div><div class="result-title" id="resultTitle"></div><div class="result-sub" id="resultSub"></div></div>
   </div>
   <div class="info-grid" id="infoGrid"></div>
   <div class="timestamp" id="resultTime"></div>
 </div>
 
-<!-- History -->
 <div class="history-section" id="historySection" style="display:none">
   <div class="section-title">ประวัติการสแกนล่าสุด</div>
   <div class="history-list" id="historyList"></div>
 </div>
 
-<!-- Config -->
 <details class="config-section" id="configSection">
   <summary>ตั้งค่า Apps Script URL</summary>
   <div class="config-body">
@@ -332,13 +94,8 @@
 </details>
 
 <script>
-// ============================================================
-// CONFIG
-// ============================================================
 let SCRIPT_URL = localStorage.getItem('scriptUrl') || '';
-if (SCRIPT_URL) {
-  document.getElementById('scriptUrl').value = SCRIPT_URL;
-}
+if (SCRIPT_URL) document.getElementById('scriptUrl').value = SCRIPT_URL;
 
 function saveConfig() {
   SCRIPT_URL = document.getElementById('scriptUrl').value.trim();
@@ -347,205 +104,120 @@ function saveConfig() {
   document.getElementById('configSection').removeAttribute('open');
 }
 
-// ============================================================
-// CAMERA + BARCODE
-// ============================================================
-const video      = document.getElementById('preview');
-const camStatus  = document.getElementById('camStatus');
-let   scanning   = false;
-let   lastCode   = '';
-let   cooldown   = false;
+const video = document.getElementById('preview');
+const camStatus = document.getElementById('camStatus');
+let detector, cooldown = false;
 
-async function startCamera() {
+async function init() {
+  if (!('BarcodeDetector' in window)) {
+    document.getElementById('compatWarn').style.display = 'block';
+    camStatus.textContent = '❌ ไม่รองรับ BarcodeDetector';
+    camStatus.classList.add('error');
+    return;
+  }
+  detector = new BarcodeDetector({
+    formats: ['code_128','code_39','ean_13','ean_8','qr_code','itf','codabar']
+  });
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }
     });
     video.srcObject = stream;
     await video.play();
     camStatus.textContent = '🟢 พร้อมสแกน';
     camStatus.classList.add('active');
-    scanning = true;
-    requestAnimationFrame(scanLoop);
-} catch (err) {
+    scanLoop();
+  } catch(err) {
     camStatus.textContent = '❌ ' + err.name + ': ' + err.message;
-    console.error(err);
+    camStatus.classList.add('error');
   }
 }
 
-// ZXing barcode reader
-const hints = new Map();
-const formats = [
-  ZXing.BarcodeFormat.CODE_128,
-  ZXing.BarcodeFormat.CODE_39,
-  ZXing.BarcodeFormat.EAN_13,
-  ZXing.BarcodeFormat.EAN_8,
-  ZXing.BarcodeFormat.ITF,
-  ZXing.BarcodeFormat.QR_CODE
-];
-hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-const reader = new ZXing.MultiFormatReader();
-hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-reader.setHints(hints);
-
-const canvas  = document.createElement('canvas');
-const ctx     = canvas.getContext('2d');
-
-function scanLoop() {
-  if (!scanning) return;
-
-  if (video.readyState === video.HAVE_ENOUGH_DATA && !cooldown) {
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-
+async function scanLoop() {
+  if (!cooldown && video.readyState === video.HAVE_ENOUGH_DATA) {
     try {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const luminance = new ZXing.RGBLuminanceSource(imageData.data, canvas.width, canvas.height);
-      const binary    = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance));
-      const result    = reader.decode(binary);
-
-      if (result && result.getText() !== lastCode) {
-        lastCode = result.getText();
+      const barcodes = await detector.detect(video);
+      if (barcodes.length > 0) {
         cooldown = true;
-        onBarcodeDetected(result.getText());
-        setTimeout(() => {
-          cooldown  = false;
-          lastCode  = '';
-        }, 3000);
+        if (navigator.vibrate) navigator.vibrate(80);
+        await onBarcodeDetected(barcodes[0].rawValue);
+        setTimeout(() => { cooldown = false; }, 3000);
       }
-    } catch (_) { /* no barcode found */ }
+    } catch(_) {}
   }
-
   requestAnimationFrame(scanLoop);
 }
 
-// ============================================================
-// BARCODE HANDLER
-// ============================================================
 async function onBarcodeDetected(code) {
-  // vibrate feedback
-  if (navigator.vibrate) navigator.vibrate(80);
-
   showLoading(code);
-
   if (!SCRIPT_URL) {
     showError('ยังไม่ได้ตั้งค่า URL', 'กรุณากรอก Apps Script URL ด้านล่าง');
-    document.getElementById('configSection').setAttribute('open', '');
+    document.getElementById('configSection').setAttribute('open','');
     return;
   }
-
   try {
-    // 1. ดึงข้อมูลพนักงาน
-    const res  = await fetch(`${SCRIPT_URL}?empId=${encodeURIComponent(code)}`);
+    const res = await fetch(`${SCRIPT_URL}?empId=${encodeURIComponent(code)}`);
     const data = await res.json();
-
-    if (!data.success) {
-      showError('ไม่พบรหัสพนักงาน', `รหัส: ${code}`);
-      addHistory(code, null, null, false);
-      return;
-    }
-
-    // 2. บันทึกการสแกน
-    await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ empId: data.empId, name: data.name, dept: data.dept }),
-      headers: { 'Content-Type': 'text/plain' }
-    });
-
+    if (!data.success) { showError('ไม่พบรหัสพนักงาน', `รหัส: ${code}`); addHistory(code,null,null,false); return; }
+    await fetch(SCRIPT_URL, { method:'POST', body: JSON.stringify({empId:data.empId,name:data.name,dept:data.dept}), headers:{'Content-Type':'text/plain'} });
     showSuccess(data);
     addHistory(data.empId, data.name, data.dept, true);
-
-  } catch (err) {
-    showError('เกิดข้อผิดพลาด', err.message);
-  }
+  } catch(err) { showError('เกิดข้อผิดพลาด', err.message); }
 }
 
-// ============================================================
-// UI HELPERS
-// ============================================================
 function showLoading(code) {
-  const card = document.getElementById('resultCard');
-  card.className = 'result-card visible loading';
+  const c = document.getElementById('resultCard');
+  c.className = 'result-card visible loading';
   document.getElementById('resultIcon').innerHTML = '<div class="spinner"></div>';
   document.getElementById('resultTitle').textContent = 'กำลังค้นหา...';
-  document.getElementById('resultSub').textContent   = `รหัส: ${code}`;
+  document.getElementById('resultSub').textContent = 'รหัส: ' + code;
   document.getElementById('infoGrid').innerHTML = '';
   document.getElementById('resultTime').innerHTML = '';
 }
 
 function showSuccess(data) {
-  const now  = new Date().toLocaleString('th-TH', { hour12: false });
-  const card = document.getElementById('resultCard');
-  card.className = 'result-card visible success';
-  document.getElementById('resultIcon').textContent  = '✅';
+  const c = document.getElementById('resultCard');
+  c.className = 'result-card visible success';
+  document.getElementById('resultIcon').textContent = '✅';
   document.getElementById('resultTitle').textContent = 'บันทึกสำเร็จ';
-  document.getElementById('resultSub').textContent   = 'ข้อมูลถูกบันทึกลง Google Sheets แล้ว';
+  document.getElementById('resultSub').textContent = 'ข้อมูลถูกบันทึกลง Google Sheets แล้ว';
   document.getElementById('infoGrid').innerHTML = `
-    <div class="info-item full">
-      <label>รหัสพนักงาน</label>
-      <span class="badge">${data.empId}</span>
-    </div>
-    <div class="info-item">
-      <label>ชื่อ-นามสกุล</label>
-      <div class="val">${data.name}</div>
-    </div>
-    <div class="info-item">
-      <label>แผนก</label>
-      <div class="val">${data.dept}</div>
-    </div>
-  `;
-  document.getElementById('resultTime').innerHTML = `🕐 ${now}`;
+    <div class="info-item full"><label>รหัสพนักงาน</label><span class="badge">${data.empId}</span></div>
+    <div class="info-item"><label>ชื่อ-นามสกุล</label><div class="val">${data.name}</div></div>
+    <div class="info-item"><label>แผนก</label><div class="val">${data.dept}</div></div>`;
+  document.getElementById('resultTime').innerHTML = '🕐 ' + new Date().toLocaleString('th-TH',{hour12:false});
 }
 
 function showError(title, sub) {
-  const card = document.getElementById('resultCard');
-  card.className = 'result-card visible error';
-  document.getElementById('resultIcon').textContent  = '❌';
+  const c = document.getElementById('resultCard');
+  c.className = 'result-card visible error';
+  document.getElementById('resultIcon').textContent = '❌';
   document.getElementById('resultTitle').textContent = title;
-  document.getElementById('resultSub').textContent   = sub;
+  document.getElementById('resultSub').textContent = sub;
   document.getElementById('infoGrid').innerHTML = '';
   document.getElementById('resultTime').innerHTML = '';
 }
 
 function addHistory(empId, name, dept, success) {
-  const section = document.getElementById('historySection');
-  const list    = document.getElementById('historyList');
-  section.style.display = 'block';
-
-  const time = new Date().toLocaleTimeString('th-TH', { hour12: false });
+  document.getElementById('historySection').style.display = 'block';
+  const list = document.getElementById('historyList');
+  const time = new Date().toLocaleTimeString('th-TH',{hour12:false});
   const item = document.createElement('div');
   item.className = 'history-item';
-  item.innerHTML = `
-    <div class="history-dot ${success ? '' : 'err'}"></div>
-    <div style="flex:1">
-      <div class="history-name">${name || empId}</div>
-      <div class="history-dept">${dept || (success ? '' : 'ไม่พบข้อมูล')}</div>
-    </div>
-    <div class="history-time">${time}</div>
-  `;
+  item.innerHTML = `<div class="history-dot ${success?'':'err'}"></div><div style="flex:1"><div class="history-name">${name||empId}</div><div class="history-dept">${dept||(success?'':'ไม่พบข้อมูล')}</div></div><div class="history-time">${time}</div>`;
   list.prepend(item);
-  // เก็บแค่ 10 รายการล่าสุด
-  while (list.children.length > 10) list.removeChild(list.lastChild);
+  while(list.children.length > 10) list.removeChild(list.lastChild);
 }
 
 function showToast(msg) {
   const t = document.createElement('div');
-  t.style.cssText = `
-    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-    background:#1a1d27; border:1px solid #00c896; color:#00c896;
-    padding:10px 20px; border-radius:999px; font-size:13px;
-    z-index:9999; animation:fadeUp .3s ease;
-  `;
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1d27;border:1px solid #00c896;color:#00c896;padding:10px 20px;border-radius:999px;font-size:13px;z-index:9999';
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 2500);
 }
 
-// ============================================================
-// INIT
-// ============================================================
-startCamera();
+init();
 </script>
 </body>
 </html>
